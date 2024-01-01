@@ -68,7 +68,7 @@ inline fn toDigit(line: []u8, idx: usize) u8 {
         return ch - '0';
     }
 
-    for (NUMBER_LITERALS) |x| {
+    for (NUMBER_LITERALS) {
         var lengthRequired = idx + x.text.len;
         if (lengthRequired > line.len) {
             break;
