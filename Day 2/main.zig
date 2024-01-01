@@ -2,7 +2,7 @@ const std = @import("std");
 
 const CubeSet = struct { red: u32 = 0, green: u32 = 0, blue: u32 = 0 };
 
-const Game = struct { id: u32, cubeSets: []const CubeSet };
+const Game = struct { id: u32, cubeSets: []const CubeSet, maximumCubeSet: CubeSet, powerValue: u32 };
 
 const NODIGIT = 255;
 
@@ -11,7 +11,8 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var total: u32 = 0;
+    var totalPassingGameIds: u32 = 0;
+    var totalPowerValue: u32 = 0;
 
     var file = try std.fs.cwd().openFile("input.txt", .{});
     defer file.close();
@@ -23,12 +24,13 @@ pub fn main() !void {
     while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
         const game = try readGame(allocator, line);
         if (gamePasses(&game)) {
-            std.debug.print("Game {d}\n", .{game.id});
-            total += game.id;
+            totalPassingGameIds += game.id;
         }
+        totalPowerValue += game.powerValue;
     }
 
-    std.debug.print("Total {d}\n", .{total});
+    std.debug.print("Total Passing Game Ids: {d}\n", .{totalPassingGameIds});
+    std.debug.print("Total Power Value: {d}\n", .{totalPowerValue});
     return;
 }
 
@@ -63,15 +65,26 @@ fn readGame(arena: std.mem.Allocator, line: []u8) !Game {
         try cubeSets.append(cubeSet);
     }
 
-    const game = Game{ .id = gameIdInt, .cubeSets = cubeSets.items };
+    var maximumCubeSet = CubeSet{};
+    for (cubeSets.items) |x| {
+        if (x.red > maximumCubeSet.red) {
+            maximumCubeSet.red = x.red;
+        }
+        if (x.green > maximumCubeSet.green) {
+            maximumCubeSet.green = x.green;
+        }
+        if (x.blue > maximumCubeSet.blue) {
+            maximumCubeSet.blue = x.blue;
+        }
+    }
+    const game = Game{ .id = gameIdInt, .cubeSets = cubeSets.items, .maximumCubeSet = maximumCubeSet, .powerValue = maximumCubeSet.red * maximumCubeSet.green * maximumCubeSet.blue };
     return game;
 }
 
 fn gamePasses(game: *const Game) bool {
-    for (game.*.cubeSets) |c| {
-        if (c.red > 12 or c.green > 13 or c.blue > 14) {
-            return false;
-        }
+    const c = game.*.maximumCubeSet;
+    if (c.red > 12 or c.green > 13 or c.blue > 14) {
+        return false;
     }
     return true;
 }
