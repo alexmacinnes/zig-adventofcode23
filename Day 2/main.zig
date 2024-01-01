@@ -14,7 +14,7 @@ pub fn main() !void {
     var totalPassingGameIds: u32 = 0;
     var totalPowerValue: u32 = 0;
 
-    var file = try std.fs.cwd().openFile("input.txt", .{});
+    var file = try std.fs.cwd().openFile("input2.txt", .{});
     defer file.close();
 
     var buf_reader = std.io.bufferedReader(file.reader());
