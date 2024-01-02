@@ -2,21 +2,150 @@ const std = @import("std");
 
 const InputLine = struct { isSymbol: []bool };
 
+const NumberDef = struct { value: u64, touchesLeft: u16, touchesRight: u16 };
+
+const NumberLine = struct { numberDefs: []NumberDef };
+
+const SymbolIndexList = struct { symbvolIndexes: []u16 };
+
 pub fn main() !void {
+    const path = "input.txt";
+
+    try part1(path);
+    try part2(path);
+}
+
+fn part1(path: []const u8) !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
-
-    const path = "input.txt";
 
     const lineLength = try firstLineLength(path);
     const inputLines = try readAllLines(allocator, path, lineLength);
     const total = try totalNumbers(path, inputLines, lineLength);
 
-    std.debug.print("{d}", .{total});
+    std.debug.print("Part 1: {d}\n", .{total});
 }
 
-fn totalNumbers(path: []const u8, lines: []InputLine, lineLength: u16) !u64 {
+fn part2(path: []const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const numberLines = try readAllNumberLines(allocator, path);
+    const total = try totalGearValue(allocator, path, numberLines);
+
+    std.debug.print("Part 2: {d}\n", .{total});
+}
+
+fn totalGearValue(arena: std.mem.Allocator, path: []const u8, numberLines: []const NumberLine) !u64 {
+    var grandTotal: u64 = 0;
+
+    var file = try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+
+    var buf_reader = std.io.bufferedReader(file.reader());
+    var in_stream = buf_reader.reader();
+    var buf: [8192]u8 = undefined;
+
+    var i: u32 = 0;
+    while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+        grandTotal += try totalGearValueFromLine(arena, i, line, numberLines);
+        i += 1;
+    }
+
+    return grandTotal;
+}
+
+fn totalGearValueFromLine(arena: std.mem.Allocator, lineIndex: u32, line: []const u8, numberLines: []const NumberLine) !u64 {
+    var lineTotal: u64 = 0;
+
+    for (0.., line) |colIdx, ch| {
+        if (isSymbol(ch)) {
+            var connectedValues = std.ArrayList(u64).init(arena);
+
+            const lowerLineIndex: u32 = switch (lineIndex) {
+                0 => 0,
+                else => lineIndex - 1,
+            };
+
+            var upperLineIndex: u32 = lineIndex + 1;
+            if (upperLineIndex == numberLines.len) {
+                upperLineIndex -= 1;
+            }
+
+            for (lowerLineIndex..upperLineIndex + 1) |rowIdx| {
+                for (numberLines[rowIdx].numberDefs) |numDef| {
+                    if (numDef.touchesLeft > colIdx) {
+                        // they are stored in order left to right, all remaining items are too far to the right on the line
+                        break;
+                    }
+                    if (numDef.touchesLeft <= colIdx and numDef.touchesRight >= colIdx) {
+                        try connectedValues.append(numDef.value);
+                    }
+                }
+            }
+
+            const vals = connectedValues.items;
+            if (vals.len == 2) {
+                lineTotal += vals[0] * vals[1];
+            }
+        }
+    }
+
+    return lineTotal;
+}
+
+fn readAllNumberLines(arena: std.mem.Allocator, path: []const u8) ![]const NumberLine {
+    var lines = std.ArrayList(NumberLine).init(arena);
+
+    var file = try std.fs.cwd().openFile(path, .{});
+    defer file.close();
+
+    var buf_reader = std.io.bufferedReader(file.reader());
+    var in_stream = buf_reader.reader();
+    var buf: [8192]u8 = undefined;
+
+    while (try in_stream.readUntilDelimiterOrEof(&buf, '\n')) |line| {
+        const nextLine = try readNumberLine(arena, line);
+        try lines.append(nextLine);
+    }
+
+    return lines.items;
+}
+
+fn readNumberLine(arena: std.mem.Allocator, line: []const u8) !NumberLine {
+    var nums = std.ArrayList(NumberDef).init(arena);
+
+    var i: u16 = 0;
+    while (i < line.len) {
+        if (isDigit(line[i])) {
+            var right = i + 1; // the index immediately to the right of the digit
+            while (right < line.len and isDigit(line[right])) {
+                right += 1;
+            }
+
+            const text = line[i..right];
+            const val = try std.fmt.parseInt(u64, text, 10);
+            const left: u16 = switch (i) {
+                0 => 0,
+                else => i - 1,
+            };
+
+            const numDef = NumberDef{ .value = val, .touchesLeft = left, .touchesRight = right };
+            try nums.append(numDef);
+
+            i = right + 1; // we know line[right] is not a digit
+        } else {
+            i += 1;
+        }
+    }
+
+    const result = NumberLine{ .numberDefs = nums.items };
+    return result;
+}
+
+fn totalNumbers(path: []const u8, lines: []const InputLine, lineLength: u16) !u64 {
     var total: u64 = 0;
 
     var file = try std.fs.cwd().openFile(path, .{});
@@ -58,7 +187,7 @@ fn totalNumbers(path: []const u8, lines: []InputLine, lineLength: u16) !u64 {
     return total;
 }
 
-inline fn nextToSymbol(rowIdx: u16, colIdx: u16, colAfterIdx: u16, lines: []InputLine) bool {
+inline fn nextToSymbol(rowIdx: u16, colIdx: u16, colAfterIdx: u16, lines: []const InputLine) bool {
 
     // lines has been padded with empty row/column in all directions, so indexes must be offset by 1
     const row = lines[rowIdx + 1];
