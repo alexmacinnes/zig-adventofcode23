@@ -1,24 +1,52 @@
 const std = @import("std");
 const sort = std.sort;
 
-const ScratchCard = struct { lineNo: u16, winningNumbers: []const u8, actualNumbers: []const u8 };
+const ScratchCard = struct { lineNo: u16, winningNumbers: []const u8, actualNumbers: []const u8, matches: u8 = 0, part1Value: u64 = 0, part2Value: u64 = 0 };
 
 pub fn main() !void {
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const scratchCards = try readAllScratchCards(allocator, "input.txt");
-    var total: u64 = 0;
-    for (scratchCards) |s| {
-        total += getPoints(s);
-    }
+    var scratchCards = try readAllScratchCards(allocator, "input.txt");
+    assignPoints(scratchCards);
+    const totals = totalPoints(scratchCards);
 
-    std.debug.print("{d}\n", .{total});
+    std.debug.print("Part 1: {d}\n", .{totals.part1});
+    std.debug.print("Part 2: {d}\n", .{totals.part2});
 }
 
-fn readAllScratchCards(arena: std.mem.Allocator, path: []const u8) ![]const ScratchCard {
-    var result = std.ArrayList(ScratchCard).init(arena);
+fn totalPoints(scratchCards: []*const ScratchCard) struct { part1: u64, part2: u64 } {
+    var totalPart1: u64 = 0;
+    var totalPart2: u64 = 0;
+
+    for (scratchCards) |s| {
+        totalPart1 += s.*.part1Value;
+        totalPart2 += s.*.part2Value;
+    }
+
+    return .{ .part1 = totalPart1, .part2 = totalPart2 };
+}
+
+fn assignPoints(scratchCards: []*ScratchCard) void {
+    var i = scratchCards.len;
+    while (i > 0) {
+        i -= 1;
+
+        var s = scratchCards[i];
+        s.*.matches = countMatches(s);
+
+        s.*.part1Value = part1Points(s.*.matches);
+
+        s.*.part2Value = 1;
+        for (1..s.*.matches + 1) |offset| {
+            s.part2Value += scratchCards[i + offset].*.part2Value;
+        }
+    }
+}
+
+fn readAllScratchCards(arena: std.mem.Allocator, path: []const u8) ![]*ScratchCard {
+    var result = std.ArrayList(*ScratchCard).init(arena);
 
     var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
@@ -42,11 +70,11 @@ fn cmpByValue(context: void, a: u8, b: u8) bool {
     return sort.asc(u8)(context, a, b);
 }
 
-fn getPoints(scratchCard: ScratchCard) u32 {
+fn countMatches(scratchCard: *const ScratchCard) u8 {
     var aIdx: u8 = 0;
     var wIdx: u8 = 0;
 
-    var matches: u6 = 0;
+    var matches: u8 = 0;
 
     while (aIdx < scratchCard.actualNumbers.len and wIdx < scratchCard.winningNumbers.len) {
         var a = scratchCard.actualNumbers[aIdx];
@@ -63,13 +91,17 @@ fn getPoints(scratchCard: ScratchCard) u32 {
         }
     }
 
+    return matches;
+}
+
+fn part1Points(matches: u8) u32 {
     if (matches == 0) {
         return 0;
     }
     return std.math.shl(u32, 1, matches - 1);
 }
 
-fn parseScratchCard(arena: std.mem.Allocator, lineNumber: u16, line: []const u8) !ScratchCard {
+fn parseScratchCard(arena: std.mem.Allocator, lineNumber: u16, line: []const u8) !*ScratchCard {
     const colon = ": ";
     const colonIdx = std.mem.indexOf(u8, line, colon).?;
     const remainder = line[colonIdx + colon.len ..];
@@ -86,7 +118,11 @@ fn parseScratchCard(arena: std.mem.Allocator, lineNumber: u16, line: []const u8)
     sort.heap(u8, winning, {}, cmpByValue);
     sort.heap(u8, actual, {}, cmpByValue);
 
-    const result = ScratchCard{ .lineNo = lineNumber, .winningNumbers = winning, .actualNumbers = actual };
+    var result = try arena.create(ScratchCard);
+    result.*.lineNo = lineNumber;
+    result.*.winningNumbers = winning;
+    result.*.actualNumbers = actual;
+
     return result;
 }
 
